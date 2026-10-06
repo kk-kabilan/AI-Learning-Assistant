@@ -35,7 +35,7 @@ def save_playbook(playbook):
 
 
 # =========================================================
-# ADD ENTRY
+# ADD STRUCTURED ENTRY
 # =========================================================
 
 def add_to_playbook(query, answer, context):
@@ -43,9 +43,15 @@ def add_to_playbook(query, answer, context):
     playbook = load_playbook()
 
     entry = {
+        "id": f"pb_{len(playbook) + 1:04d}",
+        "topic": "General",
         "question": query,
-        "answer": answer,
-        "context": context
+        "knowledge": answer,
+        "source": context,
+        "verified": True,
+        "usage_count": 0,
+        "helpful_count": 0,
+        "harmful_count": 0
     }
 
     playbook.append(entry)
@@ -56,29 +62,76 @@ def add_to_playbook(query, answer, context):
 
 
 # =========================================================
-# SEMANTIC PLAYBOOK SEARCH
+# GET TEXT USED FOR SEMANTIC SEARCH
 # =========================================================
 
-def search_playbook(query, model, threshold=0.75):
+def get_search_text(entry):
+
+    # New structured entries
+    if "knowledge" in entry:
+        return (
+            str(entry.get("question", "")) + " " +
+            str(entry.get("knowledge", "")) + " " +
+            str(entry.get("topic", ""))
+        )
+
+    # Compatibility with old Playbook entries
+    return (
+        str(entry.get("question", "")) + " " +
+        str(entry.get("answer", ""))
+    )
+
+
+# =========================================================
+# SEMANTIC PLAYBOOK SEARCH
+# BACKWARD-COMPATIBLE VERSION
+# =========================================================
+
+def search_playbook(query, model, threshold=0.60):
+
+    results = search_playbook_top_k(
+        query=query,
+        model=model,
+        k=1,
+        threshold=threshold
+    )
+
+    if not results:
+        return None
+
+    return results[0]["entry"]
+
+
+# =========================================================
+# TOP-K SEMANTIC PLAYBOOK SEARCH
+# =========================================================
+
+def search_playbook_top_k(
+    query,
+    model,
+    k=3,
+    threshold=0.60
+):
 
     playbook = load_playbook()
 
     if not playbook:
-        return None
+        return []
 
-    # Create embedding for new question
+    # Create embedding for the new question
     query_embedding = model.encode(
         [query],
         normalize_embeddings=True
     )[0]
 
-    best_entry = None
-    best_score = -1
+    scored_entries = []
 
     for entry in playbook:
 
+        search_text = get_search_text(entry)
+
         stored_embedding = model.encode(
-            [entry["question"]],
+            [search_text],
             normalize_embeddings=True
         )[0]
 
@@ -87,15 +140,41 @@ def search_playbook(query, model, threshold=0.75):
             query_embedding @ stored_embedding
         )
 
-        if score > best_score:
+        scored_entries.append({
+            "entry": entry,
+            "score": score
+        })
 
-            best_score = score
-            best_entry = entry
+    # Highest similarity first
+    scored_entries.sort(
+        key=lambda x: x["score"],
+        reverse=True
+    )
 
-    print("Best Playbook similarity:", best_score)
+    # Remove results below threshold
+    filtered_results = [
+        result
+        for result in scored_entries
+        if result["score"] >= threshold
+    ]
 
-    if best_score >= threshold:
+    # Return only top-k
+    top_results = filtered_results[:k]
 
-        return best_entry
+    print("Playbook candidates:", len(scored_entries))
 
-    return None
+    if top_results:
+        print("Top Playbook similarities:")
+
+        for result in top_results:
+
+            print(
+                f"  {result['score']:.4f} "
+                f"- {result['entry'].get('question', '')}"
+            )
+
+    else:
+
+        print("No Playbook entry passed the similarity threshold.")
+
+    return top_results

@@ -9,46 +9,63 @@ client = genai.Client(
 )
 
 
-def curate_knowledge(query, answer, reflection):
+def curate_knowledge(query, answer, reflection, context=None):
+
+    # Only curate verified answers
+    if not reflection.startswith("PASS"):
+        return "NO_UPDATE"
 
     prompt = f"""
-You are the curator of an AI tutor's persistent Playbook.
+You are a knowledge curator for an AI learning assistant.
+
+The AI tutor has answered a student's question and a reflector has
+verified that the answer is acceptable.
 
 Student question:
 {query}
 
-Generated answer:
+Verified answer:
 {answer}
 
-Reflector evaluation:
-{reflection}
+"""
 
-Your task is to extract only the most useful reusable knowledge
-from this interaction.
+    # Include study material when it is available
+    if context:
+        prompt += f"""
+Study material:
+{context}
 
-If the reflection is not PASS, return:
+Use the study material as the source of truth.
+"""
 
-NO_UPDATE
+    prompt += """
+Create a short, reusable knowledge entry that could help answer
+similar future questions.
 
-If the reflection is PASS, create a short knowledge entry that
-could help answer similar future questions.
+Requirements:
 
-Do not add information that is not present in the generated answer.
+1. Keep only important reusable knowledge.
+2. Do not invent information.
+3. Do not include conversational phrases.
+4. Make the knowledge concise and clear.
+5. Preserve important technical details.
 
 Return only the reusable knowledge.
 """
 
     try:
-
-        response = client.models.generate_content(
+        interaction = client.interactions.create(
             model="gemini-3.5-flash-lite",
-            contents=prompt
+            input=prompt
         )
 
-        return response.text.strip()
+        result = interaction.output_text.strip()
+
+        if not result:
+            return "NO_UPDATE"
+
+        return result
 
     except Exception as e:
-
         print("Curator error:", e)
-
         return "NO_UPDATE"

@@ -7,11 +7,6 @@ import os
 from dotenv import load_dotenv
 import time
 
-
-# =========================================================
-# 1. LOAD CONFIGURATION
-# =========================================================
-
 load_dotenv()
 
 client = genai.Client(
@@ -20,7 +15,7 @@ client = genai.Client(
 
 
 # =========================================================
-# 2. LOAD PDF
+# LOAD PDF
 # =========================================================
 
 def load_pdf(path):
@@ -40,7 +35,7 @@ def load_pdf(path):
 
 
 # =========================================================
-# 3. CHUNK TEXT
+# CHUNK TEXT
 # =========================================================
 
 def chunk_text(text, chunk_size=500, overlap=100):
@@ -65,7 +60,7 @@ def chunk_text(text, chunk_size=500, overlap=100):
 
 
 # =========================================================
-# 4. CREATE EMBEDDINGS + FAISS INDEX
+# CREATE VECTOR INDEX
 # =========================================================
 
 def create_vector_index(chunks):
@@ -85,13 +80,14 @@ def create_vector_index(chunks):
     index.add(embeddings)
 
     print("FAISS index created!")
+
     print("Number of vectors:", index.ntotal)
 
     return model, index
 
 
 # =========================================================
-# 5. RETRIEVE RELEVANT CONTEXT
+# RETRIEVE CURRENT STUDY MATERIAL
 # =========================================================
 
 def retrieve_context(query, model, index, chunks, k=3):
@@ -102,8 +98,6 @@ def retrieve_context(query, model, index, chunks, k=3):
         query_embedding,
         k
     )
-
-    # Relevance threshold
 
     threshold = 1.5
 
@@ -123,10 +117,14 @@ def retrieve_context(query, model, index, chunks, k=3):
 
 
 # =========================================================
-# 6. GENERATE ANSWER
+# GENERATE ANSWER
 # =========================================================
 
-def generate_answer(query, context):
+def generate_answer(
+    query,
+    context,
+    feedback=None
+):
 
     if context is None:
 
@@ -135,15 +133,16 @@ def generate_answer(query, context):
     prompt = f"""
 You are an AI tutor.
 
-Answer the student's question using ONLY the provided study material.
+Answer the student's question using ONLY the provided study material
+and verified Playbook knowledge.
 
-If the answer is not present in the study material, say:
+If the answer is not present in the provided information, say:
 
 "I couldn't find this information in the provided notes."
 
 Do not invent information.
 
-Study material:
+Study material and verified knowledge:
 
 {context}
 
@@ -154,24 +153,56 @@ Student question:
 Give a clear and simple explanation suitable for a college student.
 """
 
+    # =====================================================
+    # ADD REFLECTION FEEDBACK DURING REGENERATION
+    # =====================================================
+
+    if feedback:
+
+        prompt += f"""
+
+IMPORTANT:
+
+A previous answer failed verification.
+
+Reflector feedback:
+
+{feedback}
+
+Generate a new answer that fixes the problem identified by
+the reflector.
+
+Do not repeat unsupported claims.
+"""
+
+
     max_retries = 3
 
     for attempt in range(max_retries):
 
         try:
 
-            response = client.models.generate_content(
+            interaction = client.interactions.create(
                 model="gemini-3.5-flash-lite",
-                contents=prompt
+                input=prompt
             )
 
-            return response.text
+            answer = interaction.output_text
+
+            if not answer or not answer.strip():
+
+                return "Gemini returned an empty answer."
+
+            return answer.strip()
 
         except Exception as e:
 
             error_message = str(e)
 
-            if "429" in error_message or "RESOURCE_EXHAUSTED" in error_message:
+            if (
+                "429" in error_message
+                or "RESOURCE_EXHAUSTED" in error_message
+            ):
 
                 return "Gemini API quota has been exhausted."
 
@@ -188,48 +219,9 @@ Give a clear and simple explanation suitable for a college student.
 
             else:
 
+                print(
+                    "Generator error:",
+                    error_message
+                )
+
                 return "Gemini is currently unavailable."
-
-
-# =========================================================
-# 7. MAIN PROGRAM
-# =========================================================
-
-if __name__ == "__main__":
-
-    print("Loading PDF...")
-
-    text = load_pdf("knowledge/DBMS.pdf")
-
-    print("PDF loaded successfully.")
-
-    chunks = chunk_text(text)
-
-    print("Number of chunks:", len(chunks))
-
-    model, index = create_vector_index(chunks)
-
-    query = input("\nAsk your question: ")
-
-    context = retrieve_context(
-        query,
-        model,
-        index,
-        chunks
-    )
-
-    if context is None:
-
-        print("\nI couldn't find this information in the provided notes.")
-
-    else:
-
-        print("\nRelevant context found.")
-
-        answer = generate_answer(
-            query,
-            context
-        )
-
-        print("\n--- AI Tutor Answer ---\n")
-        print(answer)

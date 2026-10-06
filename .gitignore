@@ -1,6 +1,22 @@
+# Environment / secrets
 .env
+
+# Python
 __pycache__/
 *.pyc
 .venv/
 venv/
-hellolo.ipynb
+
+# Notebooks
+*.ipynb
+
+# Runtime-generated memory
+failure_memory.json
+playbook.json
+
+# Local backups
+playbook_backup.json
+playbook_before_final_eval.json
+
+# Generated evaluation artifacts
+evaluation_results.txt

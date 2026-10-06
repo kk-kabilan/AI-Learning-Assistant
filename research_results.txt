@@ -1,0 +1,26 @@
+FAILURE RECOVERY EXPERIMENT
+===========================
+
+Test:
+Deliberately provide an unsupported answer.
+
+Initial reflection:
+FAIL
+
+Failure reason:
+The answer incorrectly claimed that ML research and ML production
+are the same, contradicting the study material.
+
+Recovery:
+The Generator regenerated the answer using reflector feedback.
+
+Second reflection:
+PASS
+
+Result:
+SUCCESS
+
+Conclusion:
+The Generator-Reflector loop successfully detected an unsupported
+answer and recovered by regenerating an answer that passed
+verification.
