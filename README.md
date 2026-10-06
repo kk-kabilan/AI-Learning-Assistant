@@ -134,12 +134,31 @@ The system uses embedding similarity to retrieve memories based on meaning rathe
 Semantic Similarity
 The system represents both the query and stored memory as embedding vectors.
 The similarity is calculated using cosine similarity:
-\[
-\mathrm{Similarity}(q,m)
-=
-\frac{q \cdot m}
-{\lVert q\rVert \lVert m\rVert}
-\]
+
+**Similarity(q, m) = (q · m) / (||q|| × ||m||)**
+
+where:
+
+- `q` = query embedding
+- `m` = memory embedding
+- `q · m` = dot product
+- `||q||` = magnitude of the query vector
+- `||m||` = magnitude of the memory vector
+
+The implementation normalizes the embeddings before calculating their dot product:
+
+```python
+query_embedding = model.encode(
+    [query],
+    normalize_embeddings=True
+)[0]
+
+stored_embedding = model.encode(
+    [search_text],
+    normalize_embeddings=True
+)[0]
+
+score = float(query_embedding @ stored_embedding)
 where:
 - $q$ = query embedding
 - $m$ = memory embedding
